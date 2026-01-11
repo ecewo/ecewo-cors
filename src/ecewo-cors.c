@@ -191,7 +191,7 @@ int cors_init(const Cors *options) {
 
   if (opts.origins && opts.origins_count > 0) {
     for (int i = 0; i < opts.origins_count; i++) {
-      if (!add_origin_internal(opts.origins[i])) {
+      if (add_origin_internal(opts.origins[i]) != 0) {
         fprintf(stderr, "[ecewo-cors] Failed to add origin: %s\n",
                 opts.origins[i]);
         cors_cleanup();
@@ -199,7 +199,7 @@ int cors_init(const Cors *options) {
       }
     }
   } else {
-    if (!add_origin_internal("*")) {
+    if (add_origin_internal("*") != 0) {
       fprintf(stderr, "[ecewo-cors] Failed to set default origin\n");
       cors_cleanup();
       return -1;

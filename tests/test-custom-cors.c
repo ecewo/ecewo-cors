@@ -107,7 +107,7 @@ int main(void) {
     return 1;
   }
 
-  if (!cors_init(&custom_cors)) {
+  if (cors_init(&custom_cors) != 0) {
     printf("ERROR: Failed to initialize custom CORS\n");
     mock_cleanup();
     return 1;

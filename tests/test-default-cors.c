@@ -74,7 +74,7 @@ void setup_all_routes(void) {
 }
 
 int main(void) {
-  if (!cors_init(NULL)) {
+  if (cors_init(NULL) != 0) {
     printf("ERROR: Failed to initialize default CORS\n");
     mock_cleanup();
     return 1;
