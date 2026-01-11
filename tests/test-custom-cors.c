@@ -86,17 +86,17 @@ void setup_all_routes(void) {
   get("/api/data", handler_cors_test);
 }
 
-static const char *allowed_origins[] = {
+static const char *origins[] = {
   "http://localhost:3000",
   "http://example.com"
 };
 
 static const Cors custom_cors = {
-  .allowed_origins = allowed_origins,
-  .allowed_origins_count = 2,
-  .allowed_methods = "GET, POST",
+  .origins = origins,
+  .origins_count = 2,
+  .methods = "GET, POST",
   .allowed_headers = "Content-Type, Authorization",
-  .allow_credentials = true,
+  .credentials = true,
   .exposed_headers = "X-Custom-Header",
   .max_age = 600
 };

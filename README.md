@@ -15,13 +15,13 @@
 ```c
 typedef struct
 {
-    const char **allowed_origins;   // Array of allowed origins (NULL or "*" to allow all)
-    int allowed_origins_count;      // Number of origins in the array
-    const char *allowed_methods;    // Default: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-    const char *allowed_headers;    // Default: "Content-Type, Authorization, X-Requested-With"
-    const char *exposed_headers;    // Optional, default: NULL
-    bool allow_credentials;         // Default: false
-    int max_age;                    // Default: 3600
+    const char **origins;         // Array of allowed origins (NULL or "*" to allow all)
+    int origins_count;            // Number of origins in the array
+    const char *methods;          // Default: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    const char *allowed_headers;  // Default: "Content-Type, Authorization, X-Requested-With"
+    const char *exposed_headers;  // Optional, default: NULL
+    bool credentials;             // Default: false
+    int max_age;                  // Default: 3600
 } Cors;
 
 typedef struct
@@ -35,7 +35,7 @@ typedef struct
 } CorsStats;
 
 // Initialization and cleanup
-int cors_init(const Cors *config);   // Returns 1 on success, 0 on failure
+int cors_init(const Cors *config);  // Returns 0 on success, -1 on failure
 void cors_cleanup(void);
 
 // Runtime origin management
@@ -90,18 +90,18 @@ int main(void) {
 #include <stdio.h>
 
 // Configure CORS with multiple origins and custom settings
-static const char *allowed_origins[] = {
+static const char *origins[] = {
     "http://localhost:3000",
     "http://example.com"
 };
 
 static const Cors cors_config = {
-    .allowed_origins = allowed_origins,
-    .allowed_origins_count = 2,
-    .allowed_methods = "GET, POST, OPTIONS",
+    .origins = origins,
+    .origins_count = 2,
+    .methods = "GET, POST, OPTIONS",
     .allowed_headers = "Content-Type, Authorization",
     .exposed_headers = "X-Custom-Header",
-    .allow_credentials = true,
+    .credentials = true,
     .max_age = 86400,
 };
 
@@ -112,7 +112,7 @@ int main(void) {
     }
 
     // Register CORS with custom settings
-    if (!cors_init(&cors_config)) {
+    if (cors_init(&cors_config) != 0) {
         fprintf(stderr, "Failed to initialize CORS\n");
         return 1;
     }

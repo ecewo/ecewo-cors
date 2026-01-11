@@ -19,10 +19,10 @@ typedef struct {
   int origin_count;
   bool allow_all_origins; // True if "*" is in origins
 
-  char *allowed_methods;
+  char *methods;
   char *allowed_headers;
   char *exposed_headers;
-  bool allow_credentials;
+  bool credentials;
   int max_age;
 
   // Statistics
@@ -81,10 +81,10 @@ static void cors_middleware(Req *req, Res *res, Next next) {
       set_header(res, "Vary", "Origin");
     }
 
-    set_header(res, "Access-Control-Allow-Methods", cors_state.allowed_methods);
+    set_header(res, "Access-Control-Allow-Methods", cors_state.methods);
     set_header(res, "Access-Control-Allow-Headers", cors_state.allowed_headers);
 
-    if (cors_state.allow_credentials) {
+    if (cors_state.credentials) {
       set_header(res, "Access-Control-Allow-Credentials", "true");
     }
 
@@ -112,7 +112,7 @@ static void cors_middleware(Req *req, Res *res, Next next) {
   }
 
   if (should_add_headers) {
-    if (cors_state.allow_credentials) {
+    if (cors_state.credentials) {
       set_header(res, "Access-Control-Allow-Credentials", "true");
     }
 
@@ -138,23 +138,23 @@ static void free_origins_list(void) {
 
 static int add_origin_internal(const char *origin) {
   if (!origin)
-    return 0;
+    return -1;
 
   origin_node_t *node = cors_state.origins;
   while (node) {
     if (strcmp(node->origin, origin) == 0)
-      return 1;
+      return 0;
     node = node->next;
   }
 
   origin_node_t *new_node = malloc(sizeof(origin_node_t));
   if (!new_node)
-    return 0;
+    return -1;
 
   new_node->origin = strdup(origin);
   if (!new_node->origin) {
     free(new_node);
-    return 0;
+    return -1;
   }
 
   new_node->next = cors_state.origins;
@@ -165,17 +165,17 @@ static int add_origin_internal(const char *origin) {
     cors_state.allow_all_origins = true;
   }
 
-  return 1;
+  return 0;
 }
 
 static Cors cors_default_options(void) {
   Cors opts = {
-    .allowed_origins = NULL,
-    .allowed_origins_count = 0,
-    .allowed_methods = NULL,
+    .origins = NULL,
+    .origins_count = 0,
+    .methods = NULL,
     .allowed_headers = NULL,
     .exposed_headers = NULL,
-    .allow_credentials = false,
+    .credentials = false,
     .max_age = DEFAULT_MAX_AGE
   };
   return opts;
@@ -184,38 +184,38 @@ static Cors cors_default_options(void) {
 int cors_init(const Cors *options) {
   if (cors_state.initialized) {
     fprintf(stderr, "[ecewo-cors] Already initialized\n");
-    return 0;
+    return -1;
   }
 
   Cors opts = options ? *options : cors_default_options();
 
-  if (opts.allowed_origins && opts.allowed_origins_count > 0) {
-    for (int i = 0; i < opts.allowed_origins_count; i++) {
-      if (!add_origin_internal(opts.allowed_origins[i])) {
+  if (opts.origins && opts.origins_count > 0) {
+    for (int i = 0; i < opts.origins_count; i++) {
+      if (!add_origin_internal(opts.origins[i])) {
         fprintf(stderr, "[ecewo-cors] Failed to add origin: %s\n",
-                opts.allowed_origins[i]);
+                opts.origins[i]);
         cors_cleanup();
-        return 0;
+        return -1;
       }
     }
   } else {
     if (!add_origin_internal("*")) {
       fprintf(stderr, "[ecewo-cors] Failed to set default origin\n");
       cors_cleanup();
-      return 0;
+      return -1;
     }
   }
 
-  if (opts.allow_credentials && cors_state.allow_all_origins) {
+  if (opts.credentials && cors_state.allow_all_origins) {
     fprintf(stderr, "[ecewo-cors] ERROR: Cannot use credentials=true with origin=*\n");
     fprintf(stderr, "[ecewo-cors] This violates CORS specification!\n");
     fprintf(stderr, "[ecewo-cors] Please specify explicit origins when using credentials.\n");
     cors_cleanup();
-    return 0;
+    return -1;
   }
 
-  cors_state.allowed_methods = opts.allowed_methods
-      ? strdup(opts.allowed_methods)
+  cors_state.methods = opts.methods
+      ? strdup(opts.methods)
       : strdup(DEFAULT_METHODS);
 
   cors_state.allowed_headers = opts.allowed_headers
@@ -226,34 +226,34 @@ int cors_init(const Cors *options) {
       ? strdup(opts.exposed_headers)
       : NULL;
 
-  cors_state.allow_credentials = opts.allow_credentials;
+  cors_state.credentials = opts.credentials;
   cors_state.max_age = opts.max_age > 0 ? opts.max_age : DEFAULT_MAX_AGE;
 
-  if (!cors_state.allowed_methods || !cors_state.allowed_headers) {
+  if (!cors_state.methods || !cors_state.allowed_headers) {
     fprintf(stderr, "[ecewo-cors] Memory allocation failed\n");
     cors_cleanup();
-    return 0;
+    return -1;
   }
 
   cors_state.initialized = true;
 
   use(cors_middleware);
 
-  return 1;
+  return 0;
 }
 
 void cors_cleanup(void) {
   free_origins_list();
-  free(cors_state.allowed_methods);
+  free(cors_state.methods);
   free(cors_state.allowed_headers);
   free(cors_state.exposed_headers);
 
-  cors_state.allowed_methods = NULL;
+  cors_state.methods = NULL;
   cors_state.allowed_headers = NULL;
   cors_state.exposed_headers = NULL;
 
   cors_state.allow_all_origins = false;
-  cors_state.allow_credentials = false;
+  cors_state.credentials = false;
   cors_state.max_age = DEFAULT_MAX_AGE;
 
   cors_state.total_requests = 0;
@@ -268,7 +268,7 @@ void cors_cleanup(void) {
 
 int cors_add_origin(const char *origin) {
   if (!origin || !cors_state.initialized)
-    return 0;
+    return -1;
 
   int result = add_origin_internal(origin);
 
@@ -277,7 +277,7 @@ int cors_add_origin(const char *origin) {
 
 int cors_remove_origin(const char *origin) {
   if (!origin || !cors_state.initialized)
-    return 0;
+    return -1;
 
   origin_node_t *prev = NULL;
   origin_node_t *node = cors_state.origins;
@@ -298,13 +298,13 @@ int cors_remove_origin(const char *origin) {
       free(node);
       cors_state.origin_count--;
 
-      return 1;
+      return 0;
     }
     prev = node;
     node = node->next;
   }
 
-  return 0;
+  return -1;
 }
 
 bool cors_is_origin_allowed(const char *origin) {

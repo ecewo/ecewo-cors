@@ -9,78 +9,21 @@ extern "C" {
 #include <stdint.h>
 
 typedef struct {
-  const char **allowed_origins;
-  int allowed_origins_count;
-  const char *allowed_methods;
+  const char **origins;
+  int origins_count;
+  const char *methods;
   const char *allowed_headers;
   const char *exposed_headers;
-  bool allow_credentials;
+  bool credentials;
   int max_age;
 } Cors;
 
-/**
- * Initialize CORS middleware
- *
- * @param options - CORS configuration (NULL = use all defaults)
- *
- * Must be called before routes are registered.
- * Automatically registers middleware via use().
- *
- * Thread-safe: Safe to call once during startup
- *
- * Examples:
- *
- *   // Allow all origins (development only!)
- *   cors_init(NULL);
- *
- *   // Production: specific origins
- *   const char *origins[] = { "https://myapp.com" };
- *   Cors opts = {
- *       .allowed_origins = origins,
- *       .allowed_origins_count = 1,
- *       .allow_credentials = true
- *   };
- *   cors_init(&opts);
- *
- *   // Multiple origins with custom headers
- *   const char *origins[] = {
- *       "https://app1.com",
- *       "https://app2.com"
- *   };
- *   Cors opts = {
- *       .allowed_origins = origins,
- *       .allowed_origins_count = 2,
- *       .allowed_headers = "Content-Type, Authorization, X-API-Key",
- *       .exposed_headers = "X-Total-Count, X-Page-Count",
- *       .allow_credentials = true,
- *       .max_age = 7200
- *   };
- *   cors_init(&opts);
- *
- * Returns: 1 on success, 0 on failure
- */
+// Returns: 0 on success, -1 on failure
 int cors_init(const Cors *options);
 
-/**
- * Cleanup CORS module
- * Frees all allocated memory
- * Call at application shutdown
- */
 void cors_cleanup(void);
 
-// ============================================================================
-// Runtime Configuration (Optional)
-// ============================================================================
-
-/**
- * Add allowed origin dynamically
- * Thread-safe
- *
- * Example:
- *   cors_add_origin("https://newapp.com");
- *
- * Returns: 1 on success, 0 on failure
- */
+// Returns: 0 on success, -1 on failure
 int cors_add_origin(const char *origin);
 
 // Returns: 1 if removed, 0 if not found
