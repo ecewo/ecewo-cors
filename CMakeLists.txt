@@ -27,7 +27,7 @@ endif()
 target_link_libraries(ecewo_cors PUBLIC ecewo::ecewo)
 
 if (PROJECT_IS_TOP_LEVEL AND TARGET ecewo::ecewo)
-  ecewo_add_plugin(mock)
+  ecewo_plugin(mock)
   
   option(ECEWO_CORS_BUILD_TESTS "Build tests" ON)
   
