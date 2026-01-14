@@ -24,8 +24,6 @@ if (PROJECT_IS_TOP_LEVEL AND NOT TARGET ecewo::ecewo)
   FetchContent_MakeAvailable(ecewo)
 endif()
 
-target_link_libraries(ecewo_cors PUBLIC ecewo::ecewo)
-
 if (PROJECT_IS_TOP_LEVEL AND TARGET ecewo::ecewo)
   ecewo_plugin(mock)
   enable_testing()
@@ -63,3 +61,5 @@ if (PROJECT_IS_TOP_LEVEL AND TARGET ecewo::ecewo)
   add_cors_test(default)
   add_cors_test(custom)
 endif()
+
+target_link_libraries(ecewo_cors PUBLIC ecewo::ecewo)

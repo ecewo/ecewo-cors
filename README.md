@@ -2,11 +2,27 @@
 
 ## Table of Contents
 
-1. [API](#api)
-2. [Default CORS Configuration](#default-cors-configuration)
-3. [Custom CORS Configuration](#custom-cors-configuration)
-4. [Runtime Configuration](#runtime-configuration)
-5. [Statistics](#statistics)
+1. [Installation](#installation)
+2. [API](#api)
+3. [Default CORS Configuration](#default-cors-configuration)
+4. [Custom CORS Configuration](#custom-cors-configuration)
+5. [Runtime Configuration](#runtime-configuration)
+6. [Statistics](#statistics)
+
+---
+
+## Installation
+
+Add to your `CMakeLists.txt`:
+
+```sh
+ecewo_plugin(cors)
+
+target_link_libraries(app PRIVATE
+    ecewo::ecewo
+    ecewo::cors
+)
+```
 
 ---
 
