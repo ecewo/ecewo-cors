@@ -1,12 +1,14 @@
 # ecewo-cors
 
+CORS middleware for [ecewo](https://github.com/ecewo/ecewo).
+
 ## Table of Contents
 
 1. [Installation](#installation)
 2. [API](#api)
 3. [Default CORS Configuration](#default-cors-configuration)
 4. [Custom CORS Configuration](#custom-cors-configuration)
-5. [Runtime Configuration](#runtime-configuration)
+5. [Runtime Origin Management](#runtime-origin-management)
 6. [Statistics](#statistics)
 
 ---
@@ -15,8 +17,8 @@
 
 Add to your `CMakeLists.txt`:
 
-```sh
-ecewo_plugin(cors)
+```cmake
+ecewo_add(cors)
 
 target_link_libraries(app PRIVATE
     ecewo::ecewo
@@ -28,70 +30,84 @@ target_link_libraries(app PRIVATE
 
 ## API
 
+The configuration is built with a heap-backed builder, then handed to
+`ecewo_cors_install()` which copies it into the app arena and registers the
+middleware. Each app may have at most one CORS installation.
+
 ```c
-typedef struct
-{
-    const char **origins;         // Array of allowed origins (NULL or "*" to allow all)
-    int origins_count;            // Number of origins in the array
-    const char *methods;          // Default: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-    const char *allowed_headers;  // Default: "Content-Type, Authorization, X-Requested-With"
-    const char *exposed_headers;  // Optional, default: NULL
-    bool credentials;             // Default: false
-    int max_age;                  // Default: 3600
-} Cors;
+// Opaque builder. Allocate, populate, then install (or free).
+typedef struct ecewo_cors_config_s ecewo_cors_config_t;
 
-typedef struct
-{
-    uint64_t total_requests;
-    uint64_t preflight_requests;
-    uint64_t allowed_requests;
-    uint64_t rejected_requests;
-    int configured_origins;
-    bool allow_all_origins;
-} CorsStats;
+// --- Builder ---
+ecewo_cors_config_t *ecewo_cors_config_new(void);
+void ecewo_cors_config_free(ecewo_cors_config_t *config);
 
-// Initialization and cleanup
-int cors_init(const Cors *config);  // Returns 0 on success, -1 on failure
-void cors_cleanup(void);
+int  ecewo_cors_config_add_origin(ecewo_cors_config_t *config, const char *origin);
+int  ecewo_cors_config_set_methods(ecewo_cors_config_t *config, const char *methods);
+int  ecewo_cors_config_set_allowed_headers(ecewo_cors_config_t *config, const char *headers);
+int  ecewo_cors_config_set_exposed_headers(ecewo_cors_config_t *config, const char *headers);
+void ecewo_cors_config_set_credentials(ecewo_cors_config_t *config, bool credentials);
+void ecewo_cors_config_set_max_age(ecewo_cors_config_t *config, int max_age);
 
-// Runtime origin management
-int cors_add_origin(const char *origin);
-int cors_remove_origin(const char *origin);
-bool cors_is_origin_allowed(const char *origin);
+// --- Installation ---
+// Consumes `config` (success or failure). Pass NULL for defaults.
+int  ecewo_cors_install(ecewo_app_t *app, ecewo_cors_config_t *config);
 
-// Statistics
-void cors_get_stats(CorsStats *stats);
-void cors_reset_stats(void);
+// --- Runtime origin management ---
+int  ecewo_cors_add_origin(ecewo_app_t *app, const char *origin);
+int  ecewo_cors_remove_origin(ecewo_app_t *app, const char *origin);
+bool ecewo_cors_is_origin_allowed(const ecewo_app_t *app, const char *origin);
+
+// --- Statistics ---
+uint64_t ecewo_cors_stat_total(const ecewo_app_t *app);
+uint64_t ecewo_cors_stat_preflight(const ecewo_app_t *app);
+uint64_t ecewo_cors_stat_allowed(const ecewo_app_t *app);
+uint64_t ecewo_cors_stat_rejected(const ecewo_app_t *app);
+int      ecewo_cors_stat_origin_count(const ecewo_app_t *app);
+bool     ecewo_cors_stat_allow_all(const ecewo_app_t *app);
+void     ecewo_cors_reset_stats(ecewo_app_t *app);
 ```
+
+Defaults applied when not overridden:
+
+| Field             | Default                                       |
+| ----------------- | --------------------------------------------- |
+| origin            | `*` (wildcard)                                |
+| methods           | `GET, POST, PUT, DELETE, PATCH, OPTIONS`      |
+| allowed headers   | `Content-Type, Authorization, X-Requested-With` |
+| exposed headers   | none                                          |
+| credentials       | `false`                                       |
+| max-age           | `3600` seconds                                |
+
+> [!IMPORTANT]
+> `credentials = true` cannot be combined with origin `*`. The CORS spec
+> forbids it, and `ecewo_cors_install()` will fail in that case.
 
 ---
 
 ## Default CORS Configuration
 
+Pass `NULL` to install the defaults (wildcard origin, standard methods/headers,
+no credentials).
+
 ```c
 #include "ecewo.h"
 #include "ecewo-cors.h"
-#include <stdio.h>
+
+static void hello(ecewo_request_t *req, ecewo_response_t *res) {
+    (void)req;
+    ecewo_send_text(res, 200, "hello");
+}
 
 int main(void) {
-    if (server_init() != SERVER_OK) {
-        fprintf(stderr, "Failed to initialize server\n");
+    ecewo_app_t *app = ecewo_create();
+
+    if (ecewo_cors_install(app, NULL) != 0)
         return 1;
-    }
 
-    // Register CORS with default settings (allow all origins)
-    cors_init(NULL);
+    ECEWO_GET(app, "/", hello);
 
-    get("/", example_handler);
-
-    server_atexit(cors_cleanup);
-
-    if (server_listen(3000) != SERVER_OK){
-        fprintf(stderr, "Failed to start server\n");
-        return 1;
-    }
-
-    server_run();
+    ecewo_listen(app, 3000);
     return 0;
 }
 ```
@@ -100,70 +116,53 @@ int main(void) {
 
 ## Custom CORS Configuration
 
+Build the config with the `ecewo_cors_config_*` setters, then install. After a
+successful install the config handle is consumed — do not free or reuse it.
+
 ```c
 #include "ecewo.h"
 #include "ecewo-cors.h"
-#include <stdio.h>
-
-// Configure CORS with multiple origins and custom settings
-static const char *origins[] = {
-    "http://localhost:3000",
-    "http://example.com"
-};
-
-static const Cors cors_config = {
-    .origins = origins,
-    .origins_count = 2,
-    .methods = "GET, POST, OPTIONS",
-    .allowed_headers = "Content-Type, Authorization",
-    .exposed_headers = "X-Custom-Header",
-    .credentials = true,
-    .max_age = 86400,
-};
 
 int main(void) {
-    if (server_init() != SERVER_OK) {
-        fprintf(stderr, "Failed to initialize server\n");
+    ecewo_app_t *app = ecewo_create();
+
+    ecewo_cors_config_t *cfg = ecewo_cors_config_new();
+    if (!cfg) return 1;
+
+    ecewo_cors_config_add_origin(cfg, "http://localhost:3000");
+    ecewo_cors_config_add_origin(cfg, "http://example.com");
+    ecewo_cors_config_set_methods(cfg, "GET, POST");
+    ecewo_cors_config_set_allowed_headers(cfg, "Content-Type, Authorization");
+    ecewo_cors_config_set_exposed_headers(cfg, "X-Custom-Header");
+    ecewo_cors_config_set_credentials(cfg, true);
+    ecewo_cors_config_set_max_age(cfg, 86400);
+
+    if (ecewo_cors_install(app, cfg) != 0)
         return 1;
-    }
+    // cfg is now owned by the app; do not free or reuse.
 
-    // Register CORS with custom settings
-    if (cors_init(&cors_config) != 0) {
-        fprintf(stderr, "Failed to initialize CORS\n");
-        return 1;
-    }
+    ECEWO_GET(app, "/", hello);
 
-    get("/", example_handler);
-
-    server_atexit(cors_cleanup);
-
-    if (server_listen(3000) != SERVER_OK) {
-        fprintf(stderr, "Failed to start server\n");
-        return 1;
-    }
-
-    server_run();
+    ecewo_listen(app, 3000);
     return 0;
 }
 ```
 
-> [!IMPORTANT]
->
-> All strings in `Cors` config (origins, methods, headers) must have **static lifetime** and remain valid for the lifetime of the server.
+Strings passed to the setters are copied internally, so the source buffers do
+not need to outlive the call.
 
 ---
 
-## Runtime Configuration
+## Runtime Origin Management
+
+Origins can be added or removed after install. These calls must run on the
+event-loop thread (e.g. from a request handler or a timer callback).
 
 ```c
-// Add a new origin at runtime
-cors_add_origin("http://newsite.com");
+ecewo_cors_add_origin(app, "http://newsite.com");
+ecewo_cors_remove_origin(app, "http://example.com");
 
-// Remove an origin at runtime
-cors_remove_origin("http://example.com");
-
-// Check if an origin is allowed
-if (cors_is_origin_allowed("http://localhost:3000")) {
+if (ecewo_cors_is_origin_allowed(app, "http://localhost:3000")) {
     // proceed
 }
 ```
@@ -172,16 +171,15 @@ if (cors_is_origin_allowed("http://localhost:3000")) {
 
 ## Statistics
 
-```c
-CorsStats stats;
-cors_get_stats(&stats);
-printf("Total requests: %llu\n", stats.total_requests);
-printf("Preflight requests: %llu\n", stats.preflight_requests);
-printf("Allowed requests: %llu\n", stats.allowed_requests);
-printf("Rejected requests: %llu\n", stats.rejected_requests);
-printf("Configured origins: %d\n", stats.configured_origins);
-printf("Allow all origins: %s\n", stats.allow_all_origins ? "true" : "false");
+Each counter is a separate accessor. Counters are per-app.
 
-// Reset statistics
-cors_reset_stats();
+```c
+printf("Total:      %" PRIu64 "\n", ecewo_cors_stat_total(app));
+printf("Preflight:  %" PRIu64 "\n", ecewo_cors_stat_preflight(app));
+printf("Allowed:    %" PRIu64 "\n", ecewo_cors_stat_allowed(app));
+printf("Rejected:   %" PRIu64 "\n", ecewo_cors_stat_rejected(app));
+printf("Origins:    %d\n",          ecewo_cors_stat_origin_count(app));
+printf("Allow all:  %s\n",          ecewo_cors_stat_allow_all(app) ? "true" : "false");
+
+ecewo_cors_reset_stats(app);
 ```
