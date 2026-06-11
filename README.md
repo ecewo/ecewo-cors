@@ -18,7 +18,7 @@ CORS middleware for [ecewo](https://github.com/ecewo/ecewo).
 Add to your `CMakeLists.txt`:
 
 ```cmake
-ecewo_add(cors)
+ecewo_add(cors@v0.2.0)
 
 target_link_libraries(app PRIVATE
     ecewo::ecewo
